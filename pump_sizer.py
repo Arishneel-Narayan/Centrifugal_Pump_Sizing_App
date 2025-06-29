@@ -141,6 +141,30 @@ st.title("Centrifugal Pump Sizing Calculator")
 st.write("A simplified tool for sizing pumps in food-grade applications. All inputs are in the top section below.")
 st.markdown("---")
 
+# --- Fluid Templates ---
+FLUID_TEMPLATES = {
+    "Custom": {"density": 1000.0, "viscosity": 1.0, "vapor_pressure": 2.3},
+    "Water (20°C)": {"density": 998.2, "viscosity": 1.0, "vapor_pressure": 2.3},
+    "Vegetable Oil (40°C)": {"density": 910.0, "viscosity": 30.0, "vapor_pressure": 0.01},
+}
+
+# --- Initialize session state ---
+if 'fluid' not in st.session_state:
+    st.session_state.fluid = "Water (20°C)"
+if 'density' not in st.session_state:
+    st.session_state.density = FLUID_TEMPLATES[st.session_state.fluid]['density']
+if 'viscosity' not in st.session_state:
+    st.session_state.viscosity = FLUID_TEMPLATES[st.session_state.fluid]['viscosity']
+if 'vapor_pressure' not in st.session_state:
+    st.session_state.vapor_pressure = FLUID_TEMPLATES[st.session_state.fluid]['vapor_pressure']
+
+def update_fluid_properties():
+    """Callback function to update fluid properties based on template selection."""
+    selected_fluid = st.session_state.fluid_template
+    if selected_fluid != "Custom":
+        st.session_state.density = FLUID_TEMPLATES[selected_fluid]['density']
+        st.session_state.viscosity = FLUID_TEMPLATES[selected_fluid]['viscosity']
+        st.session_state.vapor_pressure = FLUID_TEMPLATES[selected_fluid]['vapor_pressure']
 
 # --- TOP BAR FOR USER INPUTS ---
 st.header("System & Process Inputs")
@@ -148,10 +172,18 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.subheader("1. Fluid & Process")
+    st.selectbox(
+        "Fluid Template", 
+        options=list(FLUID_TEMPLATES.keys()), 
+        key='fluid_template',
+        on_change=update_fluid_properties,
+        help="Select a fluid template to auto-fill properties, or choose 'Custom'."
+    )
     flow_rate = st.number_input("Flow Rate (m³/hr)", min_value=0.1, value=50.0, step=1.0, help="The volume of liquid you need to move per hour.")
-    density = st.number_input("Fluid Density (kg/m³)", min_value=1.0, value=998.0, step=10.0, help="The mass of the fluid per unit volume. Water is approx. 1000 kg/m³.")
-    viscosity = st.number_input("Fluid Viscosity (cP)", min_value=0.1, value=1.0, step=0.1, help="The fluid's resistance to flow. Water is 1 cP at 20°C.")
-    vapor_pressure = st.number_input("Fluid Vapor Pressure (kPa, abs)", min_value=0.0, value=2.3, step=0.1, format="%.2f", help="The pressure at which the liquid will start to boil at the operating temperature.")
+    density = st.number_input("Fluid Density (kg/m³)", min_value=1.0, key='density', step=10.0, help="The mass of the fluid per unit volume. Water is approx. 1000 kg/m³.")
+    viscosity = st.number_input("Fluid Viscosity (cP)", min_value=0.1, key='viscosity', step=0.1, help="The fluid's resistance to flow. Water is 1 cP at 20°C.")
+    vapor_pressure = st.number_input("Fluid Vapor Pressure (kPa, abs)", min_value=0.0, key='vapor_pressure', format="%.2f", help="The pressure at which the liquid will start to boil at the operating temperature.")
+
 
 with col2:
     st.subheader("2. System Geometry")
@@ -222,10 +254,10 @@ if st.button("Calculate Pump Size", type="primary", use_container_width=True):
     # --- 2. Display Results ---
     st.header("Calculation Results")
     
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Dynamic Head (TDH)", f"{results.get('tdh_m', 0):.2f} m", help="The total pressure the pump must generate, expressed as fluid height.")
-    col2.metric("Recommended Motor Size", f"{results.get('recommended_motor_kW', 0):.2f} kW", help="The standard motor size required to run the pump under these conditions.")
-    col3.metric("NPSH Available (NPSHa)", f"{results.get('npsha_m', 0):.2f} m", help="The pressure margin at the pump inlet available to prevent cavitation.")
+    res_col1, res_col2, res_col3 = st.columns(3)
+    res_col1.metric("Total Dynamic Head (TDH)", f"{results.get('tdh_m', 0):.2f} m", help="The total pressure the pump must generate, expressed as fluid height.")
+    res_col2.metric("Recommended Motor Size", f"{results.get('recommended_motor_kW', 0):.2f} kW", help="The standard motor size required to run the pump under these conditions.")
+    res_col3.metric("NPSH Available (NPSHa)", f"{results.get('npsha_m', 0):.2f} m", help="The pressure margin at the pump inlet available to prevent cavitation.")
 
     # NPSH Recommendation
     if npsha < 1.5:
@@ -238,20 +270,23 @@ if st.button("Calculate Pump Size", type="primary", use_container_width=True):
 
     with st.expander("Show Detailed Calculation Breakdown"):
         st.subheader("Head Calculation Details")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Static Head", f"{results.get('static_head_m', 0):.2f} m")
-        c2.metric("Pressure Head", f"{results.get('pressure_head_m', 0):.2f} m")
-        c3.metric("Friction Head", f"{results.get('friction_head_m', 0):.2f} m")
+        head_c1, head_c2, head_c3 = st.columns(3)
+        head_c1.metric("Static Head", f"{results.get('static_head_m', 0):.2f} m")
+        head_c2.metric("Pressure Head", f"{results.get('pressure_head_m', 0):.2f} m")
+        head_c3.metric("Friction Head", f"{results.get('friction_head_m', 0):.2f} m")
         
         st.subheader("Power Calculation Details")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Hydraulic Power", f"{results.get('hydraulic_power_kW', 0):.2f} kW")
-        c2.metric("Brake Horsepower (Shaft)", f"{results.get('brake_horsepower_kW', 0):.2f} kW")
-        c3.metric("Motor Power Required", f"{results.get('motor_power_required_kW', 0):.2f} kW")
+        power_c1, power_c2, power_c3 = st.columns(3)
+        power_c1.metric("Hydraulic Power", f"{results.get('hydraulic_power_kW', 0):.2f} kW")
+        power_c2.metric("Brake Horsepower (Shaft)", f"{results.get('brake_horsepower_kW', 0):.2f} kW")
+        power_c3.metric("Motor Power Required", f"{results.get('motor_power_required_kW', 0):.2f} kW")
         
         st.subheader("Flow Characteristics")
+        reynolds_val = results.get('reynolds_number', 0)
+        flow_regime = "Laminar" if reynolds_val < 2300 else "Transitional" if reynolds_val <= 4000 else "Turbulent"
         st.write(f"**Velocity in Discharge Pipe:** {results.get('velocity_m_s', 0):.2f} m/s")
-        st.write(f"**Reynolds Number:** {results.get('reynolds_number', 0):.0f}")
+        st.write(f"**Reynolds Number:** {reynolds_val:.0f}  ({flow_regime} Flow)")
+
 
 else:
     st.info("Adjust the parameters in the top section and click the 'Calculate Pump Size' button to see the results.")
