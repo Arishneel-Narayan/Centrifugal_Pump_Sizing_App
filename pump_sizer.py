@@ -86,7 +86,8 @@ def create_pdf_report(inputs, results, flow_regime):
     }
     pdf.chapter_body(details_data_for_pdf)
 
-    return pdf.output(dest='S').encode('latin-1')
+    # FIX: Return the bytearray directly without encoding
+    return pdf.output()
 
 
 # ==============================================================================
@@ -277,4 +278,3 @@ if st.session_state.results:
     )
 else:
     st.info("Adjust the parameters in the top section and click the 'Calculate Pump Size' button to see the results.")
-
