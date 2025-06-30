@@ -1,80 +1,84 @@
 import streamlit as st
 import math
-from fpdf import FPDF
 from datetime import datetime
+import io
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
 
 # ==============================================================================
-# --- PDF Report Generation ---
+# --- PDF Report Generation (Using ReportLab) ---
 # ==============================================================================
-class PDF(FPDF):
-    def header(self):
-        self.set_font('Arial', 'B', 12)
-        self.cell(0, 10, 'Centrifugal Pump Sizing Report', 0, 1, 'C')
-        self.set_font('Arial', '', 8)
-        self.cell(0, 5, f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
-        self.ln(5)
-
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
-
-    def chapter_title(self, title):
-        self.set_font('Arial', 'B', 12)
-        self.cell(0, 6, title, 0, 1, 'L')
-        self.ln(4)
-
-    def chapter_body(self, data_dict):
-        self.set_font('Arial', '', 10)
-        for key, value in data_dict.items():
-            # Using multi_cell for better text wrapping
-            self.set_font('Arial', 'B', 10)
-            self.multi_cell(60, 5, f"{key}:")
-            self.set_xy(self.get_x() + 60, self.get_y() - 5)
-            self.set_font('Arial', '', 10)
-            self.multi_cell(0, 5, str(value))
-            self.ln(2) # Add a little space between entries
-        self.ln(5)
-
 def create_pdf_report(inputs, results, flow_regime):
-    """Generates a PDF report from the input and result dictionaries."""
-    pdf = PDF()
-    pdf.add_page()
+    """Generates a PDF report using ReportLab."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+    styles = getSampleStyleSheet()
     
-    # --- Input Parameters ---
-    pdf.chapter_title('1. Input Parameters')
-    input_data_for_pdf = {
+    Story = []
+
+    # --- Header ---
+    title = Paragraph("Centrifugal Pump Sizing Report", styles['h1'])
+    timestamp = Paragraph(f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', styles['Normal'])
+    Story.append(title)
+    Story.append(timestamp)
+    Story.append(Spacer(1, 0.25*inch))
+
+    # --- Helper function for creating sections ---
+    def create_section(title_text, data_dict):
+        Story.append(Paragraph(title_text, styles['h2']))
+        Story.append(Spacer(1, 0.1*inch))
+        
+        # Convert dict to list of lists for the table
+        data_list = [[key, value] for key, value in data_dict.items()]
+        
+        table = Table(data_list, colWidths=[2.5*inch, 3.5*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (0,-1), colors.lightgrey),
+            ('TEXTCOLOR',(0,0),(-1,-1),colors.black),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,0), (-1,-1), 10),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('GRID', (0,0), (-1,-1), 1, colors.black)
+        ]))
+        Story.append(table)
+        Story.append(Spacer(1, 0.25*inch))
+
+    # --- 1. Input Parameters ---
+    input_data = {
         "Fluid Template": inputs['fluid_template'],
-        "Flow Rate (m³/hr)": inputs['flow_rate'],
-        "Fluid Density (kg/m³)": inputs['density'],
-        "Fluid Viscosity (cP)": inputs['viscosity'],
-        "Fluid Vapor Pressure (kPa, abs)": inputs['vapor_pressure'],
-        "Source Pressure (kPa, gauge)": inputs['source_pressure'],
-        "Destination Pressure (kPa, gauge)": inputs['dest_pressure'],
-        "Elevation Change (m)": inputs['elevation_change'],
+        "Flow Rate (m³/hr)": f"{inputs['flow_rate']:.2f}",
+        "Fluid Density (kg/m³)": f"{inputs['density']:.2f}",
+        "Fluid Viscosity (cP)": f"{inputs['viscosity']:.2f}",
+        "Vapor Pressure (kPa, abs)": f"{inputs['vapor_pressure']:.2f}",
+        "Source Pressure (kPa, gauge)": f"{inputs['source_pressure']:.2f}",
+        "Destination Pressure (kPa, gauge)": f"{inputs['dest_pressure']:.2f}",
+        "Elevation Change (m)": f"{inputs['elevation_change']:.2f}",
         "Pipe Material": inputs['pipe_material'],
-        "Suction Pipe Dia. (mm)": inputs['suction_pipe_dia'],
-        "Suction Pipe Len. (m)": inputs['suction_pipe_len'],
-        "Discharge Pipe Dia. (mm)": inputs['discharge_pipe_dia'],
-        "Discharge Pipe Len. (m)": inputs['discharge_pipe_len'],
-        "Liquid Level Above Suction (m)": inputs['liquid_level'],
+        "Suction Pipe Dia. (mm)": f"{inputs['suction_pipe_dia']:.2f}",
+        "Suction Pipe Len. (m)": f"{inputs['suction_pipe_len']:.2f}",
+        "Discharge Pipe Dia. (mm)": f"{inputs['discharge_pipe_dia']:.2f}",
+        "Discharge Pipe Len. (m)": f"{inputs['discharge_pipe_len']:.2f}",
+        "Liquid Level Above Suction (m)": f"{inputs['liquid_level']:.2f}",
         "Pump Efficiency": f"{inputs['pump_eff']:.2%}",
         "Motor Efficiency": f"{inputs['motor_eff']:.2%}"
     }
-    pdf.chapter_body(input_data_for_pdf)
-    
-    # --- Calculation Results ---
-    pdf.chapter_title('2. Key Results')
-    results_data_for_pdf = {
+    create_section("1. Input Parameters", input_data)
+
+    # --- 2. Key Results ---
+    results_data = {
         "Total Dynamic Head (TDH)": f"{results.get('tdh_m', 0):.2f} m",
         "Recommended Motor Size": f"{results.get('recommended_motor_kW', 0):.2f} kW",
         "NPSH Available (NPSHa)": f"{results.get('npsha_m', 0):.2f} m",
     }
-    pdf.chapter_body(results_data_for_pdf)
+    create_section("2. Key Results", results_data)
 
-    # --- Detailed Breakdown ---
-    pdf.chapter_title('3. Detailed Calculation Breakdown')
-    details_data_for_pdf = {
+    # --- 3. Detailed Breakdown ---
+    details_data = {
         "Static Head": f"{results.get('static_head_m', 0):.2f} m",
         "Pressure Head": f"{results.get('pressure_head_m', 0):.2f} m",
         "Friction Head": f"{results.get('friction_head_m', 0):.2f} m",
@@ -84,10 +88,11 @@ def create_pdf_report(inputs, results, flow_regime):
         "Velocity (Discharge Pipe)": f"{results.get('velocity_m_s', 0):.2f} m/s",
         "Reynolds Number": f"{results.get('reynolds_number', 0):.0f} ({flow_regime})",
     }
-    pdf.chapter_body(details_data_for_pdf)
-
-    # FIX: Return the bytearray directly without encoding
-    return pdf.output()
+    create_section("3. Detailed Calculation Breakdown", details_data)
+    
+    doc.build(Story)
+    buffer.seek(0)
+    return buffer
 
 
 # ==============================================================================
